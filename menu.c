@@ -9,6 +9,7 @@
 
 #define APPDIR "/usr/share/applications"
 #define ICONDIR "/usr/share/amenu/icons/48"
+#define CACHEDIR "/usr/share/amenu/icons/cache"
 #define SEARCH_ICON "/usr/share/amenu/icons/24/search.ff"
 #define FONT "Sans-serif:size=16"
 #define FONT_1 "UniSans:size=18"
@@ -117,74 +118,100 @@ load_app_entry(Application* app, char* filename)
 	char found_name = 0;
 	char found_icon = 0;
 	char found_comment = 0;
+	char cmd[1024];
 
 	app->has_icon = 0;
 	app->score = -1;
 	*app->comment = 0;
 
 	while((c = getc(f)) != EOF) {
-		if(c == '\n') {
-			c = getc(f);
-			if(c == 'N') {
-				if(found_name) continue;
-				if((c = getc(f)) != 'a') continue;
-				if((c = getc(f)) != 'm') continue;
-				if((c = getc(f)) != 'e') continue;
-				if((c = getc(f)) != '=') continue;
-				for(i = 0; ; i++) {
-					c = getc(f);
-					if(c == '\n' || c == EOF) {
-						app->name[i] = 0;
-						break;
-					};
-					app->name[i] = c;
-				}
-				found_name = 1;
-			} else if(c == 'I') {
-				if(found_icon) continue;
-				if((c = getc(f)) != 'c') continue;
-				if((c = getc(f)) != 'o') continue;
-				if((c = getc(f)) != 'n') continue;
-				if((c = getc(f)) != '=') continue;
-				for(i = 0; ; i++) {
-					c = getc(f);
-					if(c == '\n' || c == EOF) {
-						icon_name[i] = 0;
-						break;
-					};
-					icon_name[i] = c;
-				}
-				found_icon = 1;
-				if(icon_name[0] != '/') {
-					strcpy(icon_path, ICONDIR);
-					strcat(icon_path, "/");
-					strcat(icon_path, icon_name);
-					strcat(icon_path, ".ff");
-					if(!access(icon_path, F_OK)) {
-						app->icon = create_image(dc, bg, icon_path);
-						app->selected_icon = create_image(dc, bg1, icon_path);
-						app->has_icon = 1;
-					}
-				}
-			} else if(c == 'C') {
-				if(found_comment) continue;
-				if((c = getc(f)) != 'o') continue;
-				if((c = getc(f)) != 'm') continue;
-				if((c = getc(f)) != 'm') continue;
-				if((c = getc(f)) != 'e') continue;
-				if((c = getc(f)) != 'n') continue;
-				if((c = getc(f)) != 't') continue;
-				if((c = getc(f)) != '=') continue;
-				for(i = 0; ; i++) {
-					c = getc(f);
-					if(c == '\n' || c == EOF) {
-						app->comment[i] = 0;
-						break;
-					};
-					app->comment[i] = c;
-				}
-				found_comment = 1;
+		if(c == 'N') {
+			if(found_name) continue;
+			if((c = getc(f)) != 'a') continue;
+			if((c = getc(f)) != 'm') continue;
+			if((c = getc(f)) != 'e') continue;
+			if((c = getc(f)) != '=') continue;
+			for(i = 0; ; i++) {
+				c = getc(f);
+				if(c == '\n' || c == EOF) {
+					app->name[i] = 0;
+					break;
+				};
+				app->name[i] = c;
 			}
+			found_name = 1;
+		} else if(c == 'I') {
+			if(found_icon) continue;
+			if((c = getc(f)) != 'c') continue;
+			if((c = getc(f)) != 'o') continue;
+			if((c = getc(f)) != 'n') continue;
+			if((c = getc(f)) != '=') continue;
+			for(i = 0; ; i++) {
+				c = getc(f);
+				if(c == '\n' || c == EOF) {
+					icon_name[i] = 0;
+					break;
+				};
+				icon_name[i] = c;
+			}
+			found_icon = 1;
+		} else if(c == 'C') {
+			if(found_comment) continue;
+			if((c = getc(f)) != 'o') continue;
+			if((c = getc(f)) != 'm') continue;
+			if((c = getc(f)) != 'm') continue;
+			if((c = getc(f)) != 'e') continue;
+			if((c = getc(f)) != 'n') continue;
+			if((c = getc(f)) != 't') continue;
+			if((c = getc(f)) != '=') continue;
+			for(i = 0; ; i++) {
+				c = getc(f);
+				if(c == '\n' || c == EOF) {
+					app->comment[i] = 0;
+					break;
+				};
+				app->comment[i] = c;
+			}
+			found_comment = 1;
+		}
+	}
+	load_icon:
+	if(!found_icon) strcpy(icon_name, "dialog-question");
+	if(icon_name[0] != '/') {
+		strcpy(icon_path, ICONDIR);
+		strcat(icon_path, "/");
+		strcat(icon_path, icon_name);
+		strcat(icon_path, ".ff");
+		if(!access(icon_path, F_OK)) {
+			app->icon = create_image(dc, bg, icon_path);
+			app->selected_icon = create_image(dc, bg1, icon_path);
+			app->has_icon = 1;
+		} else {
+			found_icon = 0;
+			goto load_icon;
+		}
+	} else {
+		strcpy(icon_path, CACHEDIR);
+		strcat(icon_path, icon_name);
+		if(access(icon_path, F_OK)) {
+			sprintf(cmd, "mkdir -p %s", icon_path);
+			system(cmd);
+			sprintf(cmd, "rmdir %s", icon_path);
+			system(cmd);
+			strcpy(cmd, "convert ");
+			strcat(cmd, icon_name);
+			strcat(cmd, " -resize 48x48 FF:");
+			strcat(cmd, icon_path);
+			fprintf(stderr, "%s\n", cmd);
+			system(cmd);
+		}
+		if(!access(icon_path, F_OK)) {
+			app->icon = create_image(dc, bg, icon_path);
+			app->selected_icon = create_image(dc, bg1, icon_path);
+			app->has_icon = 1;
+		} else {
+			fprintf(stderr, "aaah unable to load cached icon\n");
+			exit(1);
 		}
 	}
 }
